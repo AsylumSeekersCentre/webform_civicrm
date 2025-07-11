@@ -4,7 +4,6 @@
 
 var wfCivi = (function ($, D) {
   'use strict';
-  var setting = D.settings.webform_civicrm;
   /**
    * Public methods.
    */
@@ -47,11 +46,16 @@ var wfCivi = (function ($, D) {
     }
   };
 
-  pub.existingInit = function ($field, num, nid, path, toHide) {
+  pub.existingInit = function ($field, num, nid, path, toHide, tokenInputSettings) {
     var cid = $field.val(),
-      ret = null,
+      prep = null,
       hideOrDisable = $field.attr('data-hide-method'),
       showEmpty = $field.attr('data-no-hide-blank') == '1';
+
+    function getCallbackPath() {
+      return path + (path.indexOf('?') < 0 ? '?' : '&') + $.param(getCids(nid));
+    }
+
     if ($field.length) {
       if ($field.is('[type=hidden]') && !cid) {
         return;
@@ -61,9 +65,9 @@ var wfCivi = (function ($, D) {
       }
       if (cid) {
         if (cid == $field.attr('data-civicrm-id')) {
-          ret = [{id: cid, name: $field.attr('data-civicrm-name')}];
+          prep = [{id: cid, name: $field.attr('data-civicrm-name')}];
         }
-        else if ($field.is(':text')) {
+        else if (tokenInputSettings) {
           // If for some reason the data is not embedded, fetch it from the server
           $.ajax({
             url: path,
@@ -72,19 +76,24 @@ var wfCivi = (function ($, D) {
             async: false,
             success: function(data) {
               if (data) {
-                ret = [{id: cid, name: data}];
+                prep = [{id: cid, name: data}];
               }
             }
           });
         }
       }
+      if (tokenInputSettings) {
+        tokenInputSettings.queryParam = 'str';
+        tokenInputSettings.tokenLimit = 1;
+        tokenInputSettings.prePopulate = prep;
+        $field.tokenInput(getCallbackPath, tokenInputSettings);
+      }
     }
-    return ret;
   };
 
   pub.initFileField = function(field, info) {
     info = info || {};
-    var container = $('div.webform-component[class$="--' + field.replace(/_/g, '-') + '"] div.civicrm-enabled');
+    var container = $('div.webform-component[class*="--' + field.replace(/_/g, '-') + '"] div.civicrm-enabled');
     if (container.length > 0) {
       if ($('.file', container).length > 0) {
         if ($('.file', container).is(':visible')) {
@@ -104,7 +113,7 @@ var wfCivi = (function ($, D) {
   };
 
   pub.clearFileField = function(field) {
-    var container = $('div.webform-component[class$="--' + field.replace(/_/g, '-') + '"] div.civicrm-enabled');
+    var container = $('div.webform-component[class*="--' + field.replace(/_/g, '-') + '"] div.civicrm-enabled');
     $('.civicrm-remove-file, .civicrm-file-icon', container).remove();
     $('input[type=file], input[type=submit]', container).show();
   };
@@ -127,7 +136,7 @@ var wfCivi = (function ($, D) {
         if (clear) {
           // Reset country to default
           if (n[5] === 'country') {
-            $('select.civicrm-processed', this).val(setting.defaultCountry).trigger('change', 'webform_civicrm:reset');
+            $('select.civicrm-processed', this).val(D.settings.webform_civicrm.defaultCountry).trigger('change', 'webform_civicrm:reset');
           }
           //Set default value if it is specified in component settings.
           else if ($el.hasClass('webform-component-date') && typeof defaults != "undefined" && defaults.hasOwnProperty(name)) {
@@ -258,7 +267,7 @@ var wfCivi = (function ($, D) {
       fillOptions(stateSelect, stateProvinceCache[countryId]);
     }
     else {
-      $.getJSON(setting.callbackPath+'/stateProvince/'+countryId, function(data) {
+      $.getJSON(D.settings.webform_civicrm.callbackPath + '/stateProvince/' + countryId, function(data) {
         fillOptions(stateSelect, data);
         stateProvinceCache[countryId] = data;
       });
@@ -280,7 +289,7 @@ var wfCivi = (function ($, D) {
         fillOptions(countySelect, null);
       }
       else {
-        $.getJSON(setting.callbackPath+'/county/'+stateVal+'-'+countryId, function(data) {
+        $.getJSON(D.settings.webform_civicrm.callbackPath + '/county/' + stateVal + '-' + countryId, function(data) {
           fillOptions(countySelect, data);
         });
       }
@@ -354,10 +363,10 @@ var wfCivi = (function ($, D) {
 
   D.behaviors.webform_civicrmForm = {
     attach: function (context) {
-      if (!stateProvinceCache['default'] && setting) {
-        stateProvinceCache['default'] = setting.defaultStates;
-        stateProvinceCache[setting.defaultCountry] = setting.defaultStates;
-        stateProvinceCache[''] = {'': setting.noCountry};
+      if (!stateProvinceCache['default'] && D.settings.webform_civicrm) {
+        stateProvinceCache['default'] = D.settings.webform_civicrm.defaultStates;
+        stateProvinceCache[D.settings.webform_civicrm.defaultCountry] = D.settings.webform_civicrm.defaultStates;
+        stateProvinceCache[''] = {'': D.settings.webform_civicrm.noCountry};
       }
 
       // Replace state/prov & county textboxes with dynamic select lists
